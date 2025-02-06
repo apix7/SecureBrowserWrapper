@@ -1,36 +1,19 @@
-const {app, Tray, Menu, shell, BrowserWindow, globalShortcut, screen, ipcMain} = require('electron'),
+const {app, Tray, Menu, shell, BrowserWindow, screen} = require('electron'),
       path = require('path'),
       Store = require('electron-store'),
       store = new Store();
 
-let tray, gemini, closeTimeout, visible = true;
+let tray, gemini, visible = true;
 
-const exec = code => gemini.webContents.executeJavaScript(code).catch(console.error),
-    getValue = (key, defaultVal = false) => store.get(key, defaultVal);
+const getValue = (key, defaultVal = false) => store.get(key, defaultVal);
 
 const toggleVisibility = action => {
     visible = action;
-    if (action){
-        clearTimeout(closeTimeout);
+    if (action) {
         gemini.show();
-    } else closeTimeout = setTimeout(() => gemini.hide(), 400);
-    gemini.webContents.send('toggle-visibility', action);
-};
-
-const registerKeybindings = () => {
-    globalShortcut.unregisterAll();
-    const shortcutA = getValue('shortcutA'),
-        shortcutB = getValue('shortcutB');
-
-    if (shortcutA) {
-        globalShortcut.register(shortcutA, () => toggleVisibility(!visible));
-    }
-
-    if (shortcutB) {
-        globalShortcut.register(shortcutB, () => {
-            toggleVisibility(true);
-            gemini.webContents.send('activate-mic');
-        });
+        gemini.focus();
+    } else {
+        gemini.hide();
     }
 };
 
@@ -44,7 +27,7 @@ const createWindow = () => {
         frame: false,
         movable: true,
         maximizable: false,
-        resizable: false,
+        resizable: true,
         skipTaskbar: true,
         alwaysOnTop: true,
         transparent: true,
@@ -54,11 +37,17 @@ const createWindow = () => {
         show: getValue('show-on-startup', true),
         webPreferences: {
             contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
             devTools: true,
-            nodeIntegration: true,
-            webviewTag: true,
-            preload: path.join(__dirname, 'src/preload.js')
+            nodeIntegration: false,
+            webviewTag: true
         }
+    });
+
+    // Set window class name
+    gemini.setTitle('Gemini Desktop');
+    gemini.webContents.once('dom-ready', () => {
+        gemini.webContents.executeJavaScript(`document.title = 'Gemini Desktop';`);
     });
 
     gemini.loadFile('src/index.html').catch(console.error);
@@ -66,18 +55,6 @@ const createWindow = () => {
     gemini.on('blur', () => {
         if (!getValue('always-on-top', false)) toggleVisibility(false);
     });
-
-    ipcMain.handle('get-local-storage', (event, key) => getValue(key));
-
-    ipcMain.on('set-local-storage', (event, key, value) => {
-        store.set(key, value);
-        registerKeybindings();
-    });
-
-    ipcMain.on('close', event => {
-        BrowserWindow.fromWebContents(event.sender).close();
-    });
-
 };
 
 const createTray = () => {
@@ -88,25 +65,6 @@ const createTray = () => {
             click: () => shell.openExternal('https://github.com/nekupaw/gemini-desktop').catch(console.error)
         },
         {type: 'separator'},
-        {
-            label: "Set Keybindings",
-            click: () => {
-                const dialog = new BrowserWindow({
-                    width: 500,
-                    height: 370,
-                    frame: false,
-                    maximizable: false,
-                    resizable: false,
-                    skipTaskbar: true,
-                    webPreferences: {
-                        contextIsolation: true,
-                        preload: path.join(__dirname, 'components/setKeybindingsOverlay/preload.js')
-                    }
-                });
-                dialog.loadFile('components/setKeybindingsOverlay/index.html').catch(console.error);
-                dialog.show();
-            }
-        },
         {
             label: 'Always on Top',
             type: 'checkbox',
@@ -130,8 +88,29 @@ const createTray = () => {
     tray.on('click', () => toggleVisibility(true));
 };
 
-app.whenReady().then(() => {
-    createTray();
-    createWindow();
-    registerKeybindings();
-}).catch(console.error);
+// Check if another instance is already running
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    // If another instance exists, send a signal to focus it and quit this instance
+    const { exec } = require('child_process');
+    exec('wmctrl -a "Gemini Desktop"', (error) => {
+        if (error) {
+            console.error('Error focusing window:', error);
+        }
+    });
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (gemini) {
+            if (gemini.isMinimized()) gemini.restore();
+            gemini.show();
+            gemini.focus();
+        }
+    });
+
+    app.whenReady().then(() => {
+        createTray();
+        createWindow();
+    }).catch(console.error);
+}

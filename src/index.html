@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <link rel="stylesheet" href="style.css">
     <title>Gemini</title>
 </head>
@@ -10,7 +11,15 @@
     <span class="drag"></span>
 </div>
 <div class="view">
-    <webview src="https://gemini.google.com/app"></webview>
+    <webview 
+        src="https://gemini.google.com/app"
+        partition="persist:gemini"
+        webpreferences="contextIsolation=true"
+        allowpopups="false"
+        disablewebsecurity="false"
+        nodeintegration="false"
+        sandbox
+        ></webview>
 </div>
 </body>
 </html>
