@@ -1,7 +1,7 @@
 {
-  "name": "gemini-desktop",
+  "name": "securebrowserwrapper",
   "version": "1.1.0",
-  "description": "A secure Electron-based desktop client for Google Gemini with enhanced security features",
+  "description": "A secure Electron-based browser wrapper with enhanced security features",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -15,10 +15,10 @@
     "url": "YOUR_GITHUB_REPO_URL"
   },
   "keywords": [
-    "gemini",
-    "desktop",
-    "electron",
-    "secure"
+    "secure",
+    "browser",
+    "wrapper",
+    "electron"
   ],
   "devDependencies": {
     "electron-builder": "^24.13.3",
@@ -26,12 +26,11 @@
     "electron": "^32.1.2"
   },
   "dependencies": {
-    "electron-store": "^8.2.0",
-    "electron-tray": "^0.1.1"
+    "electron-store": "^8.2.0"
   },
   "build": {
-    "appId": "gemini.neku.paw",
-    "productName": "Gemini-Desktop",
+    "appId": "secure.browser.wrapper",
+    "productName": "SecureBrowserWrapper",
     "directories": {
       "output": "build"
     },

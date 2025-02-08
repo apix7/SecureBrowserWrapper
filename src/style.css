@@ -1,8 +1,41 @@
-*{
+html, body, *, *::before, *::after, iframe, webview {
     margin: 0;
     padding: 0;
     transition: .4s cubic-bezier(0.22, 1, 0.36, 1);
     user-select: none;
+    -ms-overflow-style: none !important;  /* Hide scrollbar for IE and Edge */
+    scrollbar-width: none !important;  /* Hide scrollbar for Firefox */
+    overflow: -moz-scrollbars-none;
+    overflow: hidden !important;
+}
+
+/* Hide scrollbars for webkit browsers */
+::-webkit-scrollbar,
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    visibility: hidden !important;
+}
+
+/* Target webview and its contents specifically */
+webview::-webkit-scrollbar,
+webview::shadow::-webkit-scrollbar,
+:host::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    visibility: hidden !important;
+}
+
+/* Ensure overflow is hidden on key containers */
+body, .view, webview {
+    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
 }
 
 body{
@@ -22,6 +55,9 @@ body{
 
     webview{
         height: 100%; width: 100%;
+        overflow: hidden;
+        -ms-overflow-style: none;
+        scrollbar-width: none;
     }
 }
 

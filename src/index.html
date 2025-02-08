@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <link rel="stylesheet" href="style.css">
-    <title>Gemini</title>
+    <title>SecureBrowserWrapper</title>
 </head>
 <body>
 <div class="drag-container">
@@ -12,12 +13,14 @@
 </div>
 <div class="view">
     <webview 
-        src="https://gemini.google.com/app"
-        partition="persist:gemini"
+        src="https://duck.ai"
+        partition="persist:securebrowserwrapper"
         webpreferences="contextIsolation=true"
         allowpopups="false"
         disablewebsecurity="false"
         nodeintegration="false"
+        scrolling="no"
+        style="overflow: hidden !important;"
         sandbox
         ></webview>
 </div>
