@@ -1,4 +1,4 @@
-# Secure Google-Gemini Desktop Client (Electron)
+# Secure Browser Wrapper (Electron)
 
 A security-enhanced fork of the Google Gemini desktop client using the Electron framework. This version includes significant security improvements and better application behavior.
 
@@ -16,7 +16,6 @@ A security-enhanced fork of the Google Gemini desktop client using the Electron 
 - Single instance lock mechanism (prevents multiple instances)
 - Automatic window focusing
 - System tray integration
-- Global shortcut (Ctrl + G)
 - Always-on-top option
 - Show on startup option
 
@@ -52,11 +51,6 @@ This client operates by utilizing a WebView container to access the Gemini websi
 - Context isolation is enabled
 - Web security cannot be disabled
 
-## Tips
-
-- Use Ctrl + G to open Gemini from anywhere
-- For Windows users: copy the shortcut from the desktop to the startup folder for automatic startup
-- Use the system tray icon for quick access to settings
 
 ## Contributing
 
