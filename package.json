@@ -6,7 +6,15 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder"
+    "start:dev": "electron . --enable-logging",
+    "start:debug": "electron . --inspect=5858 --enable-logging",
+    "start:mem": "electron . --js-flags=\"--expose-gc\"",
+    "build": "electron-builder",
+    "publish": "electron-builder --publish always",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "audit": "npm audit --production",
+    "check-updates": "npx npm-check-updates"
   },
   "author": "@nekupaw",
   "license": "ISC",
@@ -21,12 +29,18 @@
     "electron"
   ],
   "devDependencies": {
+    "electron": "^29.1.5",
     "electron-builder": "^24.13.3",
     "electron-winstaller": "^5.3.0",
-    "electron": "^32.1.2"
+    "eslint": "^9.20.1",
+    "@electron-toolkit/eslint-config": "^2.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-node": "^11.1.0"
   },
   "dependencies": {
-    "electron-store": "^8.2.0"
+    "electron-store": "^8.2.0",
+    "electron-log": "^5.1.1",
+    "electron-updater": "^6.1.8"
   },
   "build": {
     "appId": "secure.browser.wrapper",
@@ -34,9 +48,28 @@
     "directories": {
       "output": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "icon.png"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.png",
+      "category": "public.app-category.utilities"
     }
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

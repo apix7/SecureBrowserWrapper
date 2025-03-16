@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.duck.ai https://*.grok.com https://*.google.com; frame-src 'self';">
     <link rel="stylesheet" href="style.css">
     <title>SecureBrowserWrapper</title>
 </head>
@@ -11,18 +11,64 @@
 <div class="drag-container">
     <span class="drag"></span>
 </div>
+<div class="loading-indicator" id="loading-indicator">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading...</div>
+</div>
+<div class="error-container" id="error-container">
+    <div class="error-icon">⚠️</div>
+    <div class="error-message" id="error-message">Unable to connect</div>
+    <button class="retry-button" id="retry-button">Retry</button>
+</div>
 <div class="view">
+    <!-- First webview: Duck AI (shown by default) -->
     <webview 
+        id="duck-ai-webview"
         src="https://duck.ai"
+        class="active-webview"
         partition="persist:securebrowserwrapper"
         webpreferences="contextIsolation=true"
         allowpopups="false"
         disablewebsecurity="false"
         nodeintegration="false"
+        contentSecurityPolicy="default-src 'self' https: 'unsafe-inline' 'unsafe-eval';"
         scrolling="no"
         style="overflow: hidden !important;"
         sandbox
-        ></webview>
+    ></webview>
+    
+    <!-- Second webview: Grok (hidden initially) -->
+    <webview 
+        id="grok-webview"
+        src="https://grok.com"
+        class="hidden-webview"
+        partition="persist:securebrowserwrapper"
+        webpreferences="contextIsolation=true"
+        allowpopups="false"
+        disablewebsecurity="false"
+        nodeintegration="false"
+        contentSecurityPolicy="default-src 'self' https: 'unsafe-inline' 'unsafe-eval';"
+        scrolling="no"
+        style="overflow: hidden !important;"
+        sandbox
+    ></webview>
+    
+    <!-- Third webview: Gemini (hidden initially) -->
+    <webview 
+        id="gemini-webview"
+        src="https://gemini.google.com"
+        class="hidden-webview"
+        partition="persist:securebrowserwrapper"
+        webpreferences="contextIsolation=true"
+        allowpopups="false"
+        disablewebsecurity="false"
+        nodeintegration="false"
+        contentSecurityPolicy="default-src 'self' https: 'unsafe-inline' 'unsafe-eval';"
+        scrolling="no"
+        style="overflow: hidden !important;"
+        sandbox
+    ></webview>
 </div>
+<script src="renderer.js"></script>
 </body>
 </html>
