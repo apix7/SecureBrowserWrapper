@@ -17,9 +17,10 @@ A security-focused Electron-based desktop client for accessing AI assistants inc
 
 ### 💻 Application Features
 - **Multi-AI Support**:
-  - Google Gemini
   - Duck.ai
+  - Perplexity
   - Grok
+  - Google Gemini
 - **Efficient Window Management**:
   - Single instance lock
   - System tray integration
@@ -69,9 +70,9 @@ Download the latest pre-compiled versions for Windows and macOS from the [releas
 ### Keyboard Shortcuts
 - `Ctrl/Cmd + G`: Launch the application
 - `Ctrl/Cmd + 1`: Switch to Duck.ai
-- `Ctrl/Cmd + 2`: Switch to Grok
-- `Ctrl/Cmd + 3`: Switch to Google Gemini
-- `Ctrl/Cmd + R`: Reload current service
+- `Ctrl/Cmd + 2`: Switch to Perplexity
+- `Ctrl/Cmd + 3`: Switch to Grok
+- `Ctrl/Cmd + 4`: Switch to Google Gemini
 
 ### Customization
 - Configure startup behavior through the system tray menu

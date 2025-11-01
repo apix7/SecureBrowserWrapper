@@ -3,6 +3,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Get all webviews
     const duckWebview = document.getElementById('duck-ai-webview');
+    const perplexityWebview = document.getElementById('perplexity-webview');
     const grokWebview = document.getElementById('grok-webview');
     const geminiWebview = document.getElementById('gemini-webview');
     
@@ -24,12 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Store last URLs for each webview
     const lastURLs = {
         'duck-ai-webview': duckWebview.src,
+        'perplexity-webview': perplexityWebview.src,
         'grok-webview': grokWebview.src,
         'gemini-webview': geminiWebview.src
     };
     
     // Webview names for status display
-    const webviewNames = ['Duck AI', 'Grok', 'Gemini'];
+    const webviewNames = ['Duck AI', 'Perplexity', 'Grok', 'Gemini'];
     
     let isNavigating = false;
     
@@ -40,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingIndicator.style.display = 'flex';
     
     // Store all webviews in an array for easier management
-    const webviews = [duckWebview, grokWebview, geminiWebview];
+    const webviews = [duckWebview, perplexityWebview, grokWebview, geminiWebview];
     
     // Listen for IPC messages from main process for switching between webviews
     window.electronAPI.onSwitchWebview((event, index) => {
@@ -136,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Set up event listeners for all webviews
-    webviews.forEach((webview, index) => {
+    webviews.forEach((webview) => {
         // Handle loading events
         webview.addEventListener('did-start-loading', () => {
             if (webview === activeWebview) {
@@ -301,6 +303,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 webview.insertCSS(`
                     /* Duck.ai specific CSS fixes/improvements can go here */
                     /* For example: */
+                    body { overflow: hidden !important; }
+                `);
+            } else if (currentURL.includes('perplexity.ai')) {
+                // Perplexity specific enhancements
+                webview.insertCSS(`
+                    /* Perplexity specific CSS fixes/improvements can go here */
                     body { overflow: hidden !important; }
                 `);
             } else if (currentURL.includes('grok.com')) {

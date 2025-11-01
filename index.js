@@ -1,6 +1,7 @@
-const {app, Tray, Menu, shell, BrowserWindow, screen, Notification, session, fuses, globalShortcut, ipcMain} = require('electron'),
+const {app, Tray, Menu, shell, BrowserWindow, Notification, session, fuses, globalShortcut, ipcMain} = require('electron'),
       path = require('path'),
-      Store = require('electron-store'),
+      _Store = require('electron-store'),
+      Store = _Store && _Store.default ? _Store.default : _Store,
       log = require('electron-log'),
       store = new Store();
 
@@ -44,6 +45,23 @@ process.on('unhandledRejection', (reason) => {
 
 let tray, browserWindow, visible = true;
 
+// Helper to persist and apply Windows login auto-start
+const getLaunchAtLogin = () => store.get('launch-at-login', true);
+const setLaunchAtLogin = (enabled) => {
+    store.set('launch-at-login', enabled);
+    try {
+        const args = app.isPackaged ? [] : [app.getAppPath()];
+        app.setLoginItemSettings({
+            openAtLogin: enabled,
+            path: process.execPath,
+            args
+        });
+        log.info('Launch at login set to', enabled, { isPackaged: app.isPackaged, execPath: process.execPath, args });
+    } catch (e) {
+        log.warn('Failed to set login item settings:', e);
+    }
+};
+
 const getValue = (key, defaultVal = false) => store.get(key, defaultVal);
 
 const toggleVisibility = action => {
@@ -60,37 +78,14 @@ const toggleVisibility = action => {
     }
 };
 
-// Function to minimize memory usage
-const reduceMemoryUsage = () => {
-    if (!browserWindow || !browserWindow.webContents) return;
-    
-    try {
-        // Minimize memory usage by clearing cache when appropriate
-        browserWindow.webContents.session.clearCache();
-        
-        // Force a garbage collection if node was started with --expose-gc
-        if (global.gc) {
-            global.gc();
-        }
-    } catch (error) {
-        console.error('Error reducing memory usage:', error);
-    }
-};
-
 // Set up a periodic memory optimization task (every 10 minutes)
 let memoryInterval;
 const startMemoryManagement = () => {
-    // Clear any existing interval
+    // Disabled aggressive cache clearing by default to avoid perf regressions
     if (memoryInterval) {
         clearInterval(memoryInterval);
     }
-    
-    // Run memory optimization every 10 minutes
-    memoryInterval = setInterval(() => {
-        if (!visible) { // Only run when app is not visible to avoid disrupting user
-            reduceMemoryUsage();
-        }
-    }, 10 * 60 * 1000); // 10 minutes
+    memoryInterval = null; // noop; can be enabled later via a setting
 };
 
 const stopMemoryManagement = () => {
@@ -101,8 +96,7 @@ const stopMemoryManagement = () => {
 };
 
 const createWindow = () => {
-    const {width, height} = screen.getPrimaryDisplay().bounds,
-        winWidth = 1080, winHeight = 720;
+    const winWidth = 1080, winHeight = 720;
 
     browserWindow = new BrowserWindow({
         width: winWidth,
@@ -123,8 +117,7 @@ const createWindow = () => {
             preload: path.join(__dirname, 'preload.js'),
             devTools: true,
             nodeIntegration: false,
-            webviewTag: true,
-            partition: 'persist:main'
+            webviewTag: true
         }
     });
 
@@ -136,6 +129,30 @@ const createWindow = () => {
 
     browserWindow.loadFile('src/index.html').catch(console.error);
 
+    // Local (window-scoped) shortcuts to avoid hijacking system/global shortcuts
+    browserWindow.webContents.on('before-input-event', (event, input) => {
+        if ((input.control || input.meta) && input.type === 'keyDown') {
+            const key = String(input.key || '').toUpperCase();
+            const code = String(input.code || '');
+            if (key === 'R') {
+                event.preventDefault();
+                browserWindow.webContents.send('reload-current-webview');
+            } else if (code === 'Digit1' || key === '1') {
+                event.preventDefault();
+                browserWindow.webContents.send('switch-webview', 0);
+            } else if (code === 'Digit2' || key === '2') {
+                event.preventDefault();
+                browserWindow.webContents.send('switch-webview', 1);
+            } else if (code === 'Digit3' || key === '3') {
+                event.preventDefault();
+                browserWindow.webContents.send('switch-webview', 2);
+            } else if (code === 'Digit4' || key === '4') {
+                event.preventDefault();
+                browserWindow.webContents.send('switch-webview', 3);
+            }
+        }
+    });
+
     browserWindow.on('blur', () => {
         if (!getValue('always-on-top', false)) toggleVisibility(false);
     });
@@ -143,16 +160,7 @@ const createWindow = () => {
     // Verify WebView options before creation
     browserWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
         // Verify URL being loaded is one of our approved URLs
-        const allowedURLs = [
-            'https://duck.ai',
-            'https://grok.com',
-            'https://gemini.google.com'
-        ];
-        
-        // Check if the URL starts with any of our allowed URLs
-        const isAllowedURL = allowedURLs.some(url => params.src.startsWith(url));
-        
-        if (!isAllowedURL) {
+        if (!isAllowed(params.src)) {
             console.error(`Blocked attempt to load URL: ${params.src}`);
             event.preventDefault();
             return;
@@ -184,22 +192,74 @@ const createWindow = () => {
         log.info('Webview attached with secure settings', { url: params.src });
     });
 
-    // Control navigation within webviews
+    // Helper: strict allowlist check
+    const isAllowed = (url) => {
+        try {
+            const { hostname, protocol } = new URL(url);
+            if (!(protocol === 'https:' || protocol === 'http:')) return false;
+            const domains = ['duck.ai','perplexity.ai','grok.com','x.ai','gemini.google.com','google.com','gstatic.com'];
+            return domains.some(d => hostname === d || hostname.endsWith(`.${d}`));
+        } catch { return false; }
+    };
+
+    // Control navigation within the embedder
     browserWindow.webContents.on('will-navigate', (event, url) => {
-        const parsedUrl = new URL(url);
-        const allowedHosts = ['duck.ai', 'grok.com', 'gemini.google.com'];
-        
-        // Block navigation to anything but allowed hosts
-        if (!allowedHosts.some(host => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`))) {
+        if (!isAllowed(url)) {
             log.warn(`Blocked navigation to: ${url}`);
             event.preventDefault();
         }
     });
 
+    // Also guard each attached webview
+    browserWindow.webContents.on('did-attach-webview', (event, wc) => {
+        wc.on('will-navigate', (event, url) => {
+            if (!isAllowed(url)) {
+                log.warn(`Blocked webview navigation to: ${url}`);
+                event.preventDefault();
+            }
+        });
+        wc.setWindowOpenHandler((details) => {
+            if (isAllowed(details.url)) {
+                return {
+                    action: 'allow',
+                    overrideBrowserWindowOptions: {
+                        webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true }
+                    }
+                };
+            }
+            setImmediate(() => shell.openExternal(details.url).catch(() => {}));
+            return { action: 'deny' };
+        });
+
+        // Add local shortcuts inside each webview so Ctrl+1..4 and Ctrl+R work while focused in the webview
+        wc.on('before-input-event', (event, input) => {
+            if ((input.control || input.meta) && input.type === 'keyDown') {
+                const key = String(input.key || '').toUpperCase();
+                const code = String(input.code || '');
+                if (key === 'R') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('reload-current-webview');
+                } else if (code === 'Digit1' || key === '1') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('switch-webview', 0);
+                } else if (code === 'Digit2' || key === '2') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('switch-webview', 1);
+                } else if (code === 'Digit3' || key === '3') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('switch-webview', 2);
+                } else if (code === 'Digit4' || key === '4') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('switch-webview', 3);
+                }
+            }
+        });
+    });
+
     // Listen for new windows and control them
     browserWindow.webContents.setWindowOpenHandler((details) => {
         const parsedUrl = new URL(details.url);
-        const allowedHosts = ['duck.ai', 'grok.com', 'gemini.google.com'];
+        const allowedHosts = ['duck.ai', 'perplexity.ai', 'grok.com', 'gemini.google.com'];
         
         // Only allow creation of new windows for our allowed domains
         if (allowedHosts.some(host => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`))) {
@@ -227,27 +287,6 @@ const createWindow = () => {
         return { action: 'deny' };
     });
 
-    // Register global shortcuts to switch between webviews
-    globalShortcut.register('CommandOrControl+1', () => {
-        log.info('Switching to Duck AI webview');
-        browserWindow.webContents.send('switch-webview', 0);
-    });
-    
-    globalShortcut.register('CommandOrControl+2', () => {
-        log.info('Switching to Grok webview');
-        browserWindow.webContents.send('switch-webview', 1);
-    });
-    
-    globalShortcut.register('CommandOrControl+3', () => {
-        log.info('Switching to Gemini webview');
-        browserWindow.webContents.send('switch-webview', 2);
-    });
-    
-    // Add a shortcut to reload the current webview
-    globalShortcut.register('CommandOrControl+R', () => {
-        log.info('Reloading current webview');
-        browserWindow.webContents.send('reload-current-webview');
-    });
 };
 
 const clearBrowsingData = async () => {
@@ -359,22 +398,29 @@ const createTray = () => {
                     }
                 },
                 {
-                    label: 'Grok (Ctrl+2)',
+                    label: 'Perplexity (Ctrl+2)',
                     click: () => {
                         toggleVisibility(true);
                         browserWindow.webContents.send('switch-webview', 1);
                     }
                 },
                 {
-                    label: 'Google Gemini (Ctrl+3)',
+                    label: 'Grok (Ctrl+3)',
                     click: () => {
                         toggleVisibility(true);
                         browserWindow.webContents.send('switch-webview', 2);
                     }
                 },
+                {
+                    label: 'Google Gemini (Ctrl+4)',
+                    click: () => {
+                        toggleVisibility(true);
+                        browserWindow.webContents.send('switch-webview', 3);
+                    }
+                },
                 {type: 'separator'},
                 {
-                    label: 'Reload Current AI (Ctrl+R)',
+                    label: 'Reload Current AI',
                     click: () => {
                         browserWindow.webContents.send('reload-current-webview');
                     }
@@ -392,6 +438,12 @@ const createTray = () => {
             type: 'checkbox',
             checked: getValue('show-on-startup', true),
             click: menuItem => store.set('show-on-startup', menuItem.checked)
+        },
+        {
+            label: 'Launch at Login (Windows)',
+            type: 'checkbox',
+            checked: getLaunchAtLogin(),
+            click: menuItem => setLaunchAtLogin(menuItem.checked)
         },
         {type: 'separator'},
         {
@@ -424,6 +476,11 @@ if (!gotTheLock) {
 
     // Add a new IPC handler for the global shortcut
     app.whenReady().then(() => {
+        // Ensure the app is registered to start at login on Windows
+        if (process.platform === 'win32') {
+            setLaunchAtLogin(getLaunchAtLogin());
+        }
+
         createTray();
         createWindow();
         
@@ -433,33 +490,20 @@ if (!gotTheLock) {
         // Start memory management
         startMemoryManagement();
         
-        // Handle the global shortcut by toggling visibility
-        const { globalShortcut } = require('electron');
-        globalShortcut.register('CommandOrControl+G', () => {
-            toggleVisibility(!visible);  // Toggle based on current state
-        });
+        // Handle global shortcuts
+        const safeRegister = (accel, handler) => {
+            try {
+                const ok = globalShortcut.register(accel, handler);
+                if (!ok) log.warn('Failed to register shortcut', accel);
+            } catch (e) { log.warn('Error registering shortcut', accel, e); }
+        };
 
-        // Add shortcuts for switching between different websites
-        globalShortcut.register('Control+1', () => {
-            if (browserWindow && browserWindow.webContents) {
-                browserWindow.webContents.send('switch-webview', 0);
-                toggleVisibility(true);
-            }
+        safeRegister('CommandOrControl+G', () => {
+            toggleVisibility(!visible);
         });
-
-        globalShortcut.register('Control+2', () => {
-            if (browserWindow && browserWindow.webContents) {
-                browserWindow.webContents.send('switch-webview', 1);
-                toggleVisibility(true);
-            }
-        });
-
-        globalShortcut.register('Control+3', () => {
-            if (browserWindow && browserWindow.webContents) {
-                browserWindow.webContents.send('switch-webview', 2);
-                toggleVisibility(true);
-            }
-        });
+        // Removed global Ctrl+1-4 to avoid hijacking system shortcuts; handled locally when window is focused
+        // Removed global Ctrl+R shortcut as it breaks system-wide Ctrl+R
+        // Reload functionality is still available via tray menu
 
         // Unregister all shortcuts when the app is about to quit
         app.on('will-quit', () => {
@@ -553,11 +597,20 @@ if (app.isPackaged) {
 }
 
 // Register IPC handlers
-ipcMain.handle('get-app-version', () => {
-    return app.getVersion();
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+// Keybindings overlay storage handlers
+ipcMain.handle('get-local-storage', (event, key) => {
+    try { return store.get(key); } catch (e) { log.error('get-local-storage error', e); return null; }
+});
+ipcMain.on('set-local-storage', (event, key, value) => {
+    try { store.set(key, value); } catch (e) { log.error('set-local-storage error', e); }
+});
+ipcMain.on('close', (event) => {
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && win !== browserWindow) win.close();
+        else if (browserWindow) toggleVisibility(false);
+    } catch (e) { log.error('close IPC error', e); }
 });
 
-// Clean up global shortcuts when app is quitting
-app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
-});
