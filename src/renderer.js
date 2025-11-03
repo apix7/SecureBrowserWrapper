@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.addEventListener('page-title-updated', (event) => {
             // Update the page title for the app's window only if this is the active webview
             if (webview === activeWebview) {
-                document.title = `SecureBrowserWrapper - ${event.title}`;
+                document.title = `AiFrame - ${event.title}`;
             }
         });
         

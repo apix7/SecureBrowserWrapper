@@ -32,30 +32,31 @@ body {
     justify-content: center;
     flex-direction: column;
     gap: 20px;
+}
 
-    .shortcut{
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+.shortcut-container .shortcut{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
 
-        .btn{
-            height: 50px;
-            border-radius: 5px;
-            background: #545454;
-            width: 50%;
-            display: grid;
-            place-items: center;
-            font-size: 17px;
-        }
-        .btn:hover{
-            background: #5d5d5d;
-        }
+.shortcut-container .shortcut .btn{
+    height: 50px;
+    border-radius: 5px;
+    background: #545454;
+    width: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+}
 
-        .name{
-            font-size: 20px;
-        }
-    }
+.shortcut-container .shortcut .btn:hover{
+    background: #5d5d5d;
+}
+
+.shortcut-container .shortcut .name{
+    font-size: 20px;
 }
 
 .headline {
@@ -74,28 +75,28 @@ body {
     box-sizing: border-box;
     width: 100%;
     gap: 20px;
+}
 
-    button.done {
-        background: #4cc2ff;
-        color: black;
-    }
+.btn-container button.done {
+    background: #4cc2ff;
+    color: black;
+}
 
-    button.done:hover {
-        filter: brightness(.9);
-    }
+.btn-container button.done:hover {
+    filter: brightness(.9);
+}
 
-    button.cancel {
-        background: #2d2d2d;
-    }
+.btn-container button.cancel {
+    background: #2d2d2d;
+}
 
-    button.cancel:hover {
-        background: #323232;
-    }
+.btn-container button.cancel:hover {
+    background: #323232;
+}
 
-    button {
-        height: 40px;
-        width: 100%;
-        border-radius: 5px;
-        font-size: 15px;
-    }
+.btn-container button {
+    height: 40px;
+    width: 100%;
+    border-radius: 5px;
+    font-size: 15px;
 }

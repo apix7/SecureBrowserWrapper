@@ -1,7 +1,7 @@
 {
-  "name": "securebrowserwrapper",
+  "name": "aiframe",
   "version": "1.1.1",
-  "description": "A secure Electron-based browser wrapper with enhanced security features",
+  "description": "AiFrame: an Electron-based AI browser frame for fast access to top assistants",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -25,9 +25,9 @@
     "url": "YOUR_GITHUB_REPO_URL"
   },
   "keywords": [
-    "secure",
+    "ai",
     "browser",
-    "wrapper",
+    "frame",
     "electron"
   ],
   "devDependencies": {
@@ -45,8 +45,8 @@
     "electron-updater": "^6.6.2"
   },
   "build": {
-    "appId": "secure.browser.wrapper",
-    "productName": "SecureBrowserWrapper",
+    "appId": "app.aiframe",
+    "productName": "AiFrame",
     "compression": "store",
     "directories": {
       "output": "build"

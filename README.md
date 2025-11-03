@@ -1,8 +1,8 @@
-# SecureBrowserWrapper
+# AiFrame
 
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 
-A security-focused Electron-based desktop client for accessing AI assistants including Google Gemini, Duck.ai, and Grok. Built with enhanced security features and optimized user experience.
+An Electron-based desktop client for fast access to AI assistants (Gemini, Duck.ai, Grok, Perplexity) with secure WebView defaults and an always-on-top frame.
 
 ## 🌟 Key Features
 

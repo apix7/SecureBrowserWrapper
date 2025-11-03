@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.duck.ai https://*.perplexity.ai https://*.grok.com https://*.x.ai https://*.google.com https://*.gstatic.com; frame-src 'self';">
     <link rel="stylesheet" href="style.css">
-    <title>SecureBrowserWrapper</title>
+    <title>AiFrame</title>
 </head>
 <body>
 <div class="drag-container">
@@ -26,10 +26,11 @@
         id="duck-ai-webview"
         src="https://duck.ai"
         class="active-webview"
-        partition="persist:securebrowserwrapper"
+        partition="persist:aiframe"
         scrolling="no"
         style="overflow: hidden !important;"
         sandbox
+        allowpopups
     ></webview>
     
     <!-- Second webview: Perplexity (hidden initially) -->
@@ -37,10 +38,11 @@
         id="perplexity-webview"
         src="https://www.perplexity.ai"
         class="hidden-webview"
-        partition="persist:securebrowserwrapper"
+        partition="persist:aiframe"
         scrolling="no"
         style="overflow: hidden !important;"
         sandbox
+        allowpopups
     ></webview>
     
     <!-- Third webview: Grok (hidden initially) -->
@@ -48,10 +50,11 @@
         id="grok-webview"
         src="https://grok.com"
         class="hidden-webview"
-        partition="persist:securebrowserwrapper"
+        partition="persist:aiframe"
         scrolling="no"
         style="overflow: hidden !important;"
         sandbox
+        allowpopups
     ></webview>
     
     <!-- Fourth webview: Gemini (hidden initially) -->
@@ -59,10 +62,11 @@
         id="gemini-webview"
         src="https://gemini.google.com"
         class="hidden-webview"
-        partition="persist:securebrowserwrapper"
+        partition="persist:aiframe"
         scrolling="no"
         style="overflow: hidden !important;"
         sandbox
+        allowpopups
     ></webview>
 </div>
 <script src="renderer.js"></script>

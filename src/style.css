@@ -52,13 +52,13 @@ body{
     background: white;
     opacity: 1;
     transform: scale(1);
+}
 
-    webview{
-        height: 100%; width: 100%;
-        overflow: hidden;
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-    }
+.view webview{
+    height: 100%; width: 100%;
+    overflow: hidden;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .view.close{
@@ -68,24 +68,44 @@ body{
 
 
 .drag-container{
-    height: 25px;
-    width: 100%;
-    display: flex;
-    justify-content: flex-end;
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    width: auto;
+    height: auto;
+    display: block;
+    z-index: 2000;
+}
 
+/* Make the drag handle small, visible and outside main content */
+.drag{
+    -webkit-app-region: drag;
+    cursor: move;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.7);
+    background-image: url("assets/drag.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 70% 70%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
 
-    .drag{
-        background-image: url("assets/drag.png");
-        background-size: cover;
-        height: 20px; width: 20px;
-        opacity: 0;
-        -webkit-app-region: drag;
-    }
-
+/* Fallback icon if the image is missing */
+.drag::after{
+    content: "⋮⋮";
+    font-size: 12px;
+    line-height: 28px;
+    color: rgba(255,255,255,0.85);
+    display: block;
+    text-align: center;
 }
 
 .drag-container:hover .drag{
-    opacity: .5;
+    opacity: 1;
+    background: rgba(0,0,0,0.5);
 }
 
 /* Loading Indicator */

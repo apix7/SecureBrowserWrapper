@@ -44,6 +44,8 @@ process.on('unhandledRejection', (reason) => {
 });
 
 let tray, browserWindow, visible = true;
+let hasUpdateReady = false;
+let installUpdateAndRestart = null;
 
 // Helper to persist and apply Windows login auto-start
 const getLaunchAtLogin = () => store.get('launch-at-login', true);
@@ -98,6 +100,7 @@ const stopMemoryManagement = () => {
 const createWindow = () => {
     const winWidth = 1080, winHeight = 720;
 
+
     browserWindow = new BrowserWindow({
         width: winWidth,
         height: winHeight,
@@ -106,7 +109,7 @@ const createWindow = () => {
         maximizable: false,
         resizable: true,
         skipTaskbar: true,
-        alwaysOnTop: true,
+        alwaysOnTop: getValue('always-on-top', false),
         transparent: true,
         center: true,
         icon: path.join(__dirname, 'icon.png'),
@@ -122,9 +125,9 @@ const createWindow = () => {
     });
 
     // Set window class name
-    browserWindow.setTitle('SecureBrowserWrapper');
+    browserWindow.setTitle('AiFrame');
     browserWindow.webContents.once('dom-ready', () => {
-        browserWindow.webContents.executeJavaScript(`document.title = 'SecureBrowserWrapper';`);
+        browserWindow.webContents.executeJavaScript(`document.title = 'AiFrame';`);
     });
 
     browserWindow.loadFile('src/index.html').catch(console.error);
@@ -182,14 +185,7 @@ const createWindow = () => {
         webPreferences.enableWebSQL = false;
         webPreferences.enableRemoteModule = false;
         
-        // Set secure session permissions
-        browserWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-            // Deny all permission requests from webviews
-            const allowedPermissions = ['fullscreen'];
-            callback(allowedPermissions.includes(permission));
-        });
-        
-        log.info('Webview attached with secure settings', { url: params.src });
+        log.info('Webview will attach with secure settings', { url: params.src });
     });
 
     // Helper: strict allowlist check
@@ -207,6 +203,7 @@ const createWindow = () => {
         if (!isAllowed(url)) {
             log.warn(`Blocked navigation to: ${url}`);
             event.preventDefault();
+            setImmediate(() => shell.openExternal(url).catch(() => {}));
         }
     });
 
@@ -216,6 +213,7 @@ const createWindow = () => {
             if (!isAllowed(url)) {
                 log.warn(`Blocked webview navigation to: ${url}`);
                 event.preventDefault();
+                setImmediate(() => shell.openExternal(url).catch(() => {}));
             }
         });
         wc.setWindowOpenHandler((details) => {
@@ -230,6 +228,16 @@ const createWindow = () => {
             setImmediate(() => shell.openExternal(details.url).catch(() => {}));
             return { action: 'deny' };
         });
+
+        // Set secure session permissions for this webview's session only
+        try {
+            wc.session.setPermissionRequestHandler((webContents, permission, callback) => {
+                const allowedPermissions = ['fullscreen'];
+                callback(allowedPermissions.includes(permission));
+            });
+        } catch (e) {
+            log.warn('Failed to set permission handler for webview session', e);
+        }
 
         // Add local shortcuts inside each webview so Ctrl+1..4 and Ctrl+R work while focused in the webview
         wc.on('before-input-event', (event, input) => {
@@ -259,10 +267,9 @@ const createWindow = () => {
     // Listen for new windows and control them
     browserWindow.webContents.setWindowOpenHandler((details) => {
         const parsedUrl = new URL(details.url);
-        const allowedHosts = ['duck.ai', 'perplexity.ai', 'grok.com', 'gemini.google.com'];
-        
+
         // Only allow creation of new windows for our allowed domains
-        if (allowedHosts.some(host => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`))) {
+        if (isAllowed(details.url)) {
             // Allow window creation but prevent it from having node integration
             return {
                 action: 'allow',
@@ -280,7 +287,7 @@ const createWindow = () => {
         if (parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:') {
             setImmediate(() => {
                 log.info(`Opening external URL in browser: ${details.url}`);
-                shell.openExternal(details.url);
+                shell.openExternal(details.url).catch(() => {});
             });
         }
         
@@ -294,8 +301,8 @@ const clearBrowsingData = async () => {
 
     try {
         // Get all active sessions including the main one and webviews
-        const sessions = new Set();
-        sessions.add(browserWindow.webContents.session);
+        const sessionsSet = new Set();
+        sessionsSet.add(browserWindow.webContents.session);
         
         // Get all webview sessions
         const webviews = await browserWindow.webContents.executeJavaScript(`
@@ -307,14 +314,14 @@ const clearBrowsingData = async () => {
                 const webviewSession = partition.startsWith('persist:') 
                     ? session.fromPartition(partition)
                     : session.fromPartition(`persist:${partition}`);
-                sessions.add(webviewSession);
+                sessionsSet.add(webviewSession);
             }
         }
 
         // Clear data for all sessions
-        for (const session of sessions) {
+        for (const s of sessionsSet) {
             // Clear all storage data
-            await session.clearStorageData({
+            await s.clearStorageData({
                 storages: [
                     'appcache',
                     'cookies',
@@ -334,20 +341,21 @@ const clearBrowsingData = async () => {
             });
 
             // Clear HTTP cache
-            await session.clearCache();
+            await s.clearCache();
             
             // Clear host resolver cache
-            await session.clearHostResolverCache();
+            await s.clearHostResolverCache();
             
             // Clear authentication cache
-            session.clearAuthCache();
+            s.clearAuthCache();
 
             // Clear all cookies
-            const cookies = await session.cookies.get({});
+            const cookies = await s.cookies.get({});
             for (const cookie of cookies) {
                 try {
-                    const url = `${cookie.secure ? 'https' : 'http'}://${cookie.domain}${cookie.path}`;
-                    await session.cookies.remove(url, cookie.name);
+                    const domain = cookie.domain && cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+                    const url = `${cookie.secure ? 'https' : 'http'}://${domain}${cookie.path}`;
+                    await s.cookies.remove(url, cookie.name);
                 } catch (e) {
                     console.error('Error removing cookie:', e);
                 }
@@ -366,14 +374,14 @@ const clearBrowsingData = async () => {
 
         // Show notification
         new Notification({ 
-            title: 'SecureBrowserWrapper', 
+            title: 'AiFrame', 
             body: 'All browsing data has been cleared' 
         }).show();
         
     } catch (error) {
         console.error('Error clearing browsing data:', error);
         new Notification({ 
-            title: 'SecureBrowserWrapper', 
+            title: 'AiFrame', 
             body: 'Error clearing browsing data' 
         }).show();
     }
@@ -381,84 +389,106 @@ const clearBrowsingData = async () => {
 
 const createTray = () => {
     tray = new Tray(path.join(__dirname, 'icon.png'));
-    const contextMenu = Menu.buildFromTemplate([
-        {
-            label: 'About (GitHub)',
-            click: () => shell.openExternal('https://github.com/apix7/securebrowserwrapper').catch(console.error)
-        },
-        {type: 'separator'},
-        {
-            label: 'AI Assistants',
-            submenu: [
-                {
-                    label: 'Duck AI (Ctrl+1)',
-                    click: () => {
-                        toggleVisibility(true);
-                        browserWindow.webContents.send('switch-webview', 0);
-                    }
-                },
-                {
-                    label: 'Perplexity (Ctrl+2)',
-                    click: () => {
-                        toggleVisibility(true);
-                        browserWindow.webContents.send('switch-webview', 1);
-                    }
-                },
-                {
-                    label: 'Grok (Ctrl+3)',
-                    click: () => {
-                        toggleVisibility(true);
-                        browserWindow.webContents.send('switch-webview', 2);
-                    }
-                },
-                {
-                    label: 'Google Gemini (Ctrl+4)',
-                    click: () => {
-                        toggleVisibility(true);
-                        browserWindow.webContents.send('switch-webview', 3);
-                    }
-                },
-                {type: 'separator'},
-                {
-                    label: 'Reload Current AI',
-                    click: () => {
-                        browserWindow.webContents.send('reload-current-webview');
-                    }
-                }
-            ]
-        },
-        {
-            label: 'Always on Top',
-            type: 'checkbox',
-            checked: getValue('always-on-top', false),
-            click: menuItem => store.set('always-on-top', menuItem.checked)
-        },
-        {
-            label: 'Show on Startup',
-            type: 'checkbox',
-            checked: getValue('show-on-startup', true),
-            click: menuItem => store.set('show-on-startup', menuItem.checked)
-        },
-        {
-            label: 'Launch at Login (Windows)',
-            type: 'checkbox',
-            checked: getLaunchAtLogin(),
-            click: menuItem => setLaunchAtLogin(menuItem.checked)
-        },
-        {type: 'separator'},
-        {
-            label: 'Clear Browsing Data',
-            click: () => clearBrowsingData()
-        },
-        {type: 'separator'},
-        {
-            label: 'Quit SecureBrowserWrapper',
-            click: () => browserWindow.close()
-        }
-    ]);
 
-    tray.setContextMenu(contextMenu);
+    const updateTrayMenu = () => {
+        const template = [
+            {
+                label: 'About (GitHub)',
+                click: () => shell.openExternal('https://github.com/apix7/securebrowserwrapper').catch(console.error)
+            },
+            {type: 'separator'},
+            {
+                label: 'AI Assistants',
+                submenu: [
+                    {
+                        label: 'Duck AI (Ctrl+1)',
+                        click: () => {
+                            toggleVisibility(true);
+                            browserWindow.webContents.send('switch-webview', 0);
+                        }
+                    },
+                    {
+                        label: 'Perplexity (Ctrl+2)',
+                        click: () => {
+                            toggleVisibility(true);
+                            browserWindow.webContents.send('switch-webview', 1);
+                        }
+                    },
+                    {
+                        label: 'Grok (Ctrl+3)',
+                        click: () => {
+                            toggleVisibility(true);
+                            browserWindow.webContents.send('switch-webview', 2);
+                        }
+                    },
+                    {
+                        label: 'Google Gemini (Ctrl+4)',
+                        click: () => {
+                            toggleVisibility(true);
+                            browserWindow.webContents.send('switch-webview', 3);
+                        }
+                    },
+                    {type: 'separator'},
+                    {
+                        label: 'Reload Current AI',
+                        click: () => {
+                            browserWindow.webContents.send('reload-current-webview');
+                        }
+                    }
+                ]
+            },
+            {
+                label: 'Always on Top',
+                type: 'checkbox',
+                checked: getValue('always-on-top', false),
+                click: menuItem => {
+                    store.set('always-on-top', menuItem.checked);
+                    try { browserWindow.setAlwaysOnTop(menuItem.checked); } catch (e) { log.warn('setAlwaysOnTop failed', e); }
+                }
+            },
+            {
+                label: 'Show on Startup',
+                type: 'checkbox',
+                checked: getValue('show-on-startup', true),
+                click: menuItem => store.set('show-on-startup', menuItem.checked)
+            },
+            {
+                label: 'Launch at Login (Windows)',
+                type: 'checkbox',
+                checked: getLaunchAtLogin(),
+                click: menuItem => setLaunchAtLogin(menuItem.checked)
+            },
+            {type: 'separator'},
+            {
+                label: 'Clear Browsing Data',
+                click: () => clearBrowsingData()
+            },
+        ];
+
+        if (hasUpdateReady) {
+            template.push({
+                label: 'Install Update and Restart',
+                click: () => installUpdateAndRestart && installUpdateAndRestart()
+            });
+            template.push({type: 'separator'});
+        } else {
+            template.push({type: 'separator'});
+        }
+
+        template.push({
+            label: 'Quit AiFrame',
+            click: () => browserWindow.close()
+        });
+
+        const contextMenu = Menu.buildFromTemplate(template);
+        tray.setContextMenu(contextMenu);
+    };
+
+    updateTrayMenu();
     tray.on('click', () => toggleVisibility(true));
+
+    // Expose updater menu refresh to outer scope
+    createTray.updateMenu = updateTrayMenu;
 };
 
 // Check if another instance is already running
@@ -551,26 +581,10 @@ const setupAutoUpdater = () => {
                 body: 'A new version has been downloaded. Restart the application to apply the updates.'
             }).show();
             
-            // Add update option to tray menu
-            if (tray) {
-                const contextMenu = tray.getContextMenu();
-                const menuItems = contextMenu.items;
-                const hasUpdateItem = menuItems.some(item => item.label === 'Install Update and Restart');
-                
-                if (!hasUpdateItem) {
-                    // Create a new context menu with the update item
-                    const newMenuItems = [...menuItems];
-                    // Add before the last separator and quit item
-                    newMenuItems.splice(newMenuItems.length - 2, 0, {
-                        label: 'Install Update and Restart',
-                        click: () => {
-                            autoUpdater.quitAndInstall();
-                        }
-                    });
-                    
-                    const newContextMenu = Menu.buildFromTemplate(newMenuItems);
-                    tray.setContextMenu(newContextMenu);
-                }
+            hasUpdateReady = true;
+            installUpdateAndRestart = () => autoUpdater.quitAndInstall();
+            if (tray && typeof createTray.updateMenu === 'function') {
+                createTray.updateMenu();
             }
         });
         
