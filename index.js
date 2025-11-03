@@ -7,6 +7,12 @@ const {app, Tray, Menu, shell, BrowserWindow, Notification, session, fuses, glob
 
 // Disable GPU hardware acceleration to avoid GPU-related errors
 app.disableHardwareAcceleration();
+// Enable sandbox globally for all renderers (best practice)
+try { app.enableSandbox(); } catch (e) { log.warn('enableSandbox failed', e); }
+// Set Windows App User Model ID for notifications / jump list
+if (process.platform === 'win32') {
+    try { app.setAppUserModelId('AiFrame'); } catch (e) { log.warn('setAppUserModelId failed', e); }
+}
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -192,7 +198,7 @@ const createWindow = () => {
     const isAllowed = (url) => {
         try {
             const { hostname, protocol } = new URL(url);
-            if (!(protocol === 'https:' || protocol === 'http:')) return false;
+            if (protocol !== 'https:') return false;
             const domains = ['duck.ai','perplexity.ai','grok.com','x.ai','gemini.google.com','google.com','gstatic.com'];
             return domains.some(d => hostname === d || hostname.endsWith(`.${d}`));
         } catch { return false; }
@@ -485,6 +491,7 @@ const createTray = () => {
     };
 
     updateTrayMenu();
+    try { tray.setToolTip('AiFrame'); } catch (e) { log.warn('tray.setToolTip failed', e); }
     tray.on('click', () => toggleVisibility(true));
 
     // Expose updater menu refresh to outer scope

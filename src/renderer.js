@@ -231,12 +231,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Handle crashed or unresponsive webviews
-        webview.addEventListener('crashed', () => {
+        webview.addEventListener('render-process-gone', (event) => {
             if (webview === activeWebview) {
                 isNavigating = false;
                 loadingIndicator.style.display = 'none';
                 errorContainer.style.display = 'flex';
-                errorMessage.textContent = 'The page crashed. Please try again.';
+                const reason = event.reason || 'render process gone';
+                errorMessage.textContent = `The page became unavailable (${reason}). Please try again.`;
                 
                 if (window.loadingTimeout) {
                     clearTimeout(window.loadingTimeout);
