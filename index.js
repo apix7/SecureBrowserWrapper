@@ -7,6 +7,9 @@ const {app, Tray, Menu, shell, BrowserWindow, Notification, session, fuses, glob
 
 // Disable GPU hardware acceleration to avoid GPU-related errors
 app.disableHardwareAcceleration();
+// Prevent background throttling so hidden tabs still load
+try { app.commandLine.appendSwitch('disable-renderer-backgrounding'); } catch {}
+try { app.commandLine.appendSwitch('disable-backgrounding-occluded-windows'); } catch {}
 // Enable sandbox globally for all renderers (best practice)
 try { app.enableSandbox(); } catch (e) { log.warn('enableSandbox failed', e); }
 // Set Windows App User Model ID for notifications / jump list
@@ -52,6 +55,9 @@ process.on('unhandledRejection', (reason) => {
 let tray, browserWindow, visible = true;
 let hasUpdateReady = false;
 let installUpdateAndRestart = null;
+
+// Check for --hidden flag in command line arguments
+const startHidden = process.argv.includes('--hidden');
 
 // Helper to persist and apply Windows login auto-start
 const getLaunchAtLogin = () => store.get('launch-at-login', true);
@@ -106,6 +112,13 @@ const stopMemoryManagement = () => {
 const createWindow = () => {
     const winWidth = 1080, winHeight = 720;
 
+    // Helper: strict allowlist check (HTTPS only)
+    const isAllowed = (url) => {
+        try {
+            const { protocol } = new URL(url);
+            return protocol === 'https:'; // allow all HTTPS
+        } catch { return false; }
+    };
 
     browserWindow = new BrowserWindow({
         width: winWidth,
@@ -119,16 +132,22 @@ const createWindow = () => {
         transparent: true,
         center: true,
         icon: path.join(__dirname, 'icon.png'),
-        show: getValue('show-on-startup', true),
+        show: startHidden ? false : getValue('show-on-startup', true),
         webPreferences: {
             contextIsolation: true,
             sandbox: true,
             preload: path.join(__dirname, 'preload.js'),
             devTools: true,
             nodeIntegration: false,
-            webviewTag: true
+            webviewTag: true,
+            backgroundThrottling: false
         }
     });
+    
+    // Update visible state based on startHidden flag
+    if (startHidden) {
+        visible = false;
+    }
 
     // Set window class name
     browserWindow.setTitle('AiFrame');
@@ -158,6 +177,9 @@ const createWindow = () => {
             } else if (code === 'Digit4' || key === '4') {
                 event.preventDefault();
                 browserWindow.webContents.send('switch-webview', 3);
+            } else if (code === 'Digit5' || key === '5') {
+                event.preventDefault();
+                browserWindow.webContents.send('switch-webview', 4);
             }
         }
     });
@@ -175,7 +197,7 @@ const createWindow = () => {
             return;
         }
         
-        // Ensure security settings can't be overridden
+        // Enforce secure settings for webviews
         delete webPreferences.preload;
         webPreferences.nodeIntegration = false;
         webPreferences.nodeIntegrationInWorker = false;
@@ -185,24 +207,16 @@ const createWindow = () => {
         webPreferences.allowRunningInsecureContent = false;
         webPreferences.webSecurity = true;
         webPreferences.experimentalFeatures = false;
+        webPreferences.backgroundThrottling = false;
         
-        // Add additional security measures
-        webPreferences.spellcheck = false;
+        // Additional hardening
+        webPreferences.spellcheck = true;
         webPreferences.enableWebSQL = false;
         webPreferences.enableRemoteModule = false;
         
         log.info('Webview will attach with secure settings', { url: params.src });
     });
 
-    // Helper: strict allowlist check
-    const isAllowed = (url) => {
-        try {
-            const { hostname, protocol } = new URL(url);
-            if (protocol !== 'https:') return false;
-            const domains = ['duck.ai','perplexity.ai','grok.com','x.ai','gemini.google.com','google.com','gstatic.com'];
-            return domains.some(d => hostname === d || hostname.endsWith(`.${d}`));
-        } catch { return false; }
-    };
 
     // Control navigation within the embedder
     browserWindow.webContents.on('will-navigate', (event, url) => {
@@ -223,24 +237,67 @@ const createWindow = () => {
             }
         });
         wc.setWindowOpenHandler((details) => {
-            if (isAllowed(details.url)) {
-                return {
-                    action: 'allow',
-                    overrideBrowserWindowOptions: {
-                        webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true }
-                    }
-                };
-            }
-            setImmediate(() => shell.openExternal(details.url).catch(() => {}));
+            // Always open new windows/tabs in external browser
+            // This ensures Duck AI and other services open links externally
+            log.info(`Opening URL in external browser: ${details.url}`);
+            setImmediate(() => shell.openExternal(details.url).catch((err) => {
+                log.error('Failed to open external URL:', err);
+            }));
             return { action: 'deny' };
+        });
+
+        // Context menu for copy/paste/select in webviews
+        wc.on('context-menu', (event, params) => {
+            const template = [];
+            const ef = params.editFlags || {};
+            if (ef.canUndo) template.push({ role: 'undo' });
+            if (ef.canRedo) template.push({ role: 'redo' });
+            if (template.length) template.push({ type: 'separator' });
+            if (ef.canCut) template.push({ role: 'cut' });
+            if (ef.canCopy) template.push({ role: 'copy' });
+            if (ef.canPaste) template.push({ role: 'paste' });
+            if (ef.canSelectAll) template.push({ role: 'selectAll' });
+            if (template.length) Menu.buildFromTemplate(template).popup({ window: browserWindow });
         });
 
         // Set secure session permissions for this webview's session only
         try {
             wc.session.setPermissionRequestHandler((webContents, permission, callback) => {
-                const allowedPermissions = ['fullscreen'];
-                callback(allowedPermissions.includes(permission));
+                // Always allow clipboard operations and media for embedded sites
+                if (
+                    permission === 'clipboard-read' ||
+                    permission === 'clipboard-write' ||
+                    permission === 'clipboard-sanitized-write' ||
+                    permission === 'media' ||
+                    permission === 'display-capture' ||
+                    permission === 'notifications' ||
+                    permission === 'fullscreen'
+                ) {
+                    return callback(true);
+                }
+                callback(false);
             });
+
+            // Also allow clipboard via permission check handler
+            try {
+                wc.session.setPermissionCheckHandler((webContents, permission) => {
+                    if (
+                        permission === 'clipboard-read' ||
+                        permission === 'clipboard-write' ||
+                        permission === 'clipboard-sanitized-write' ||
+                        permission === 'media' ||
+                        permission === 'display-capture' ||
+                        permission === 'notifications' ||
+                        permission === 'fullscreen'
+                    ) {
+                        return true;
+                    }
+                    return false;
+                });
+            } catch {
+                // ignore
+            }
+            
         } catch (e) {
             log.warn('Failed to set permission handler for webview session', e);
         }
@@ -265,6 +322,9 @@ const createWindow = () => {
                 } else if (code === 'Digit4' || key === '4') {
                     event.preventDefault();
                     browserWindow.webContents.send('switch-webview', 3);
+                } else if (code === 'Digit5' || key === '5') {
+                    event.preventDefault();
+                    browserWindow.webContents.send('switch-webview', 4);
                 }
             }
         });
@@ -272,32 +332,36 @@ const createWindow = () => {
 
     // Listen for new windows and control them
     browserWindow.webContents.setWindowOpenHandler((details) => {
-        const parsedUrl = new URL(details.url);
-
-        // Only allow creation of new windows for our allowed domains
-        if (isAllowed(details.url)) {
-            // Allow window creation but prevent it from having node integration
-            return {
-                action: 'allow',
-                overrideBrowserWindowOptions: {
-                    webPreferences: {
-                        nodeIntegration: false,
-                        contextIsolation: true,
-                        sandbox: true
-                    }
-                }
-            };
-        }
-        
-        // For all other URLs, block window creation and instead open in external browser
-        if (parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:') {
-            setImmediate(() => {
-                log.info(`Opening external URL in browser: ${details.url}`);
-                shell.openExternal(details.url).catch(() => {});
-            });
+        // Open all new windows in external browser
+        try {
+            const parsedUrl = new URL(details.url);
+            if (parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:') {
+                setImmediate(() => {
+                    log.info(`Opening external URL in browser: ${details.url}`);
+                    shell.openExternal(details.url).catch((err) => {
+                        log.error('Failed to open external URL:', err);
+                    });
+                });
+            }
+        } catch (err) {
+            log.error('Invalid URL in setWindowOpenHandler:', details.url, err);
         }
         
         return { action: 'deny' };
+    });
+
+    // Context menu for copy/paste/select in main window
+    browserWindow.webContents.on('context-menu', (event, params) => {
+        const template = [];
+        const ef = params.editFlags || {};
+        if (ef.canUndo) template.push({ role: 'undo' });
+        if (ef.canRedo) template.push({ role: 'redo' });
+        if (template.length) template.push({ type: 'separator' });
+        if (ef.canCut) template.push({ role: 'cut' });
+        if (ef.canCopy) template.push({ role: 'copy' });
+        if (ef.canPaste) template.push({ role: 'paste' });
+        if (ef.canSelectAll) template.push({ role: 'selectAll' });
+        if (template.length) Menu.buildFromTemplate(template).popup({ window: browserWindow });
     });
 
 };
@@ -434,6 +498,13 @@ const createTray = () => {
                             browserWindow.webContents.send('switch-webview', 3);
                         }
                     },
+                    {
+                        label: 'Sora ChatGPT (Ctrl+5)',
+                        click: () => {
+                            toggleVisibility(true);
+                            browserWindow.webContents.send('switch-webview', 4);
+                        }
+                    },
                     {type: 'separator'},
                     {
                         label: 'Reload Current AI',
@@ -483,7 +554,9 @@ const createTray = () => {
 
         template.push({
             label: 'Quit AiFrame',
-            click: () => browserWindow.close()
+            click: () => {
+                try { app.quit(); } catch (e) { log.warn('app.quit failed', e); }
+            }
         });
 
         const contextMenu = Menu.buildFromTemplate(template);
@@ -538,9 +611,9 @@ if (!gotTheLock) {
         safeRegister('CommandOrControl+G', () => {
             toggleVisibility(!visible);
         });
-        // Removed global Ctrl+1-4 to avoid hijacking system shortcuts; handled locally when window is focused
-        // Removed global Ctrl+R shortcut as it breaks system-wide Ctrl+R
-        // Reload functionality is still available via tray menu
+        
+        // Only Ctrl+1..5 shortcuts are window-scoped (handled in before-input-event)
+        // Removed global shortcuts to avoid hijacking system-wide Ctrl+1..5
 
         // Unregister all shortcuts when the app is about to quit
         app.on('will-quit', () => {

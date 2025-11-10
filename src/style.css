@@ -2,11 +2,16 @@ html, body, *, *::before, *::after, iframe, webview {
     margin: 0;
     padding: 0;
     transition: .4s cubic-bezier(0.22, 1, 0.36, 1);
-    user-select: none;
     -ms-overflow-style: none !important;  /* Hide scrollbar for IE and Edge */
     scrollbar-width: none !important;  /* Hide scrollbar for Firefox */
     overflow: -moz-scrollbars-none;
     overflow: hidden !important;
+}
+
+/* Allow selection/copy inside embedded sites */
+webview, iframe {
+    user-select: text !important;
+    -webkit-user-select: text !important;
 }
 
 /* Hide scrollbars for webkit browsers */

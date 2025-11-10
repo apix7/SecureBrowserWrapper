@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.duck.ai https://*.perplexity.ai https://*.grok.com https://*.x.ai https://*.google.com https://*.gstatic.com; frame-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob:; frame-src * data: blob:;">
     <link rel="stylesheet" href="style.css">
     <title>AiFrame</title>
 </head>
@@ -27,9 +27,6 @@
         src="https://duck.ai"
         class="active-webview"
         partition="persist:aiframe"
-        scrolling="no"
-        style="overflow: hidden !important;"
-        sandbox
         allowpopups
     ></webview>
     
@@ -39,9 +36,6 @@
         src="https://www.perplexity.ai"
         class="hidden-webview"
         partition="persist:aiframe"
-        scrolling="no"
-        style="overflow: hidden !important;"
-        sandbox
         allowpopups
     ></webview>
     
@@ -51,9 +45,6 @@
         src="https://grok.com"
         class="hidden-webview"
         partition="persist:aiframe"
-        scrolling="no"
-        style="overflow: hidden !important;"
-        sandbox
         allowpopups
     ></webview>
     
@@ -63,9 +54,15 @@
         src="https://gemini.google.com"
         class="hidden-webview"
         partition="persist:aiframe"
-        scrolling="no"
-        style="overflow: hidden !important;"
-        sandbox
+        allowpopups
+    ></webview>
+
+    <!-- Fifth webview: Sora ChatGPT (hidden initially) -->
+    <webview 
+        id="sora-webview"
+        src="https://sora.chatgpt.com"
+        class="hidden-webview"
+        partition="persist:aiframe"
         allowpopups
     ></webview>
 </div>

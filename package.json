@@ -22,7 +22,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "YOUR_GITHUB_REPO_URL"
+    "url": "https://github.com/apix7/securebrowserwrapper.git"
   },
   "keywords": [
     "ai",
@@ -54,6 +54,8 @@
     "publish": [
       {
         "provider": "github",
+        "owner": "apix7",
+        "repo": "securebrowserwrapper",
         "releaseType": "release"
       }
     ],

@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const perplexityWebview = document.getElementById('perplexity-webview');
     const grokWebview = document.getElementById('grok-webview');
     const geminiWebview = document.getElementById('gemini-webview');
+    const soraWebview = document.getElementById('sora-webview');
     
     // Common elements
     const loadingIndicator = document.getElementById('loading-indicator');
@@ -27,11 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
         'duck-ai-webview': duckWebview.src,
         'perplexity-webview': perplexityWebview.src,
         'grok-webview': grokWebview.src,
-        'gemini-webview': geminiWebview.src
+        'gemini-webview': geminiWebview.src,
+        'sora-webview': soraWebview.src
     };
     
     // Webview names for status display
-    const webviewNames = ['Duck AI', 'Perplexity', 'Grok', 'Gemini'];
+    const webviewNames = ['Duck AI', 'Perplexity', 'Grok', 'Gemini', 'Sora'];
     
     let isNavigating = false;
     
@@ -42,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingIndicator.style.display = 'flex';
     
     // Store all webviews in an array for easier management
-    const webviews = [duckWebview, perplexityWebview, grokWebview, geminiWebview];
+    const webviews = [duckWebview, perplexityWebview, grokWebview, geminiWebview, soraWebview];
     
     // Listen for IPC messages from main process for switching between webviews
     window.electronAPI.onSwitchWebview((event, index) => {
@@ -153,7 +155,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 window.loadingTimeout = setTimeout(() => {
                     if (isNavigating && webview === activeWebview) {
-                        document.querySelector('.loading-text').textContent = 'This is taking longer than expected...';
+                        const loadingText = document.querySelector('.loading-text');
+                        if (loadingText) {
+                            loadingText.textContent = 'This is taking longer than expected...';
+                        }
                     }
                 }, 10000); // 10 seconds
             }
@@ -165,6 +170,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadingIndicator.style.display = 'none';
                 if (window.loadingTimeout) {
                     clearTimeout(window.loadingTimeout);
+                }
+                // Reset loading text
+                const loadingText = document.querySelector('.loading-text');
+                if (loadingText) {
+                    loadingText.textContent = 'Loading...';
                 }
             }
         });
@@ -291,6 +301,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize the status indicator with the current active webview
     updateStatusIndicator(webviewNames[activeWebviewIndex]);
+
+    // Force hidden tabs to load once on startup to avoid manual reloads
+    setTimeout(() => {
+        webviews.forEach((wv, idx) => {
+            try {
+                // Only touch non-active tabs
+                if (wv !== activeWebview) {
+                    const currentUrl = (typeof wv.getURL === 'function') ? wv.getURL() : '';
+                    if (!currentUrl || currentUrl === 'about:blank') {
+                        // Trigger initial navigation
+                        const target = lastURLs[wv.id] || wv.src;
+                        wv.src = target;
+                    } else if (!wv.isLoading()) {
+                        // Ensure real load completes once
+                        wv.reload();
+                    }
+                }
+            } catch (e) {
+                console.error('Initial tab load error:', e);
+            }
+        });
+    }, 700);
     
     // Apply UI enhancements for specific sites
     function applyUIEnhancements(webview) {
@@ -303,26 +335,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Example: Add custom CSS for duck.ai if needed
                 webview.insertCSS(`
                     /* Duck.ai specific CSS fixes/improvements can go here */
-                    /* For example: */
-                    body { overflow: hidden !important; }
                 `);
             } else if (currentURL.includes('perplexity.ai')) {
                 // Perplexity specific enhancements
                 webview.insertCSS(`
                     /* Perplexity specific CSS fixes/improvements can go here */
-                    body { overflow: hidden !important; }
                 `);
             } else if (currentURL.includes('grok.com')) {
                 // Grok.com specific enhancements
                 webview.insertCSS(`
                     /* Grok.com specific CSS fixes/improvements can go here */
-                    body { overflow: hidden !important; }
                 `);
             } else if (currentURL.includes('gemini.google.com')) {
                 // Gemini specific enhancements
                 webview.insertCSS(`
                     /* Gemini specific CSS fixes/improvements can go here */
-                    body { overflow: hidden !important; }
+                `);
+            } else if (currentURL.includes('sora.chatgpt.com') || currentURL.includes('chatgpt.com')) {
+                // Sora ChatGPT specific enhancements
+                webview.insertCSS(`
+                    /* ChatGPT/Sora specific CSS fixes/improvements can go here */
                 `);
             }
         } catch (e) {
