@@ -37,3 +37,6 @@ yarn-error.log*
 # OS files
 Thumbs.db
 Desktop.ini
+
+# Local development scripts
+restart-aiframe.bat
